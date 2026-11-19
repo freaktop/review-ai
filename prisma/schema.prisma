@@ -1,0 +1,112 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Business {
+  id           String   @id @default(cuid())
+  name         String
+  slug         String   @unique
+  reviewUrl    String?
+  delayHours   Int      @default(24)
+  enabled      Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  admins       BusinessAdmin[]
+  completions  ServiceCompletion[]
+  requests     ReviewRequest[]
+  optOuts      OptOut[]
+  auditLogs    AuditLog[]
+}
+
+model BusinessAdmin {
+  id           String   @id @default(cuid())
+  businessId   String
+  email        String   @unique
+  passwordHash String
+  name         String?
+  createdAt    DateTime @default(now())
+  business     Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+}
+
+model ServiceCompletion {
+  id            String   @id @default(cuid())
+  businessId    String
+  externalId    String?
+  idempotencyKey String  @unique
+  customerId    String?
+  customerEmail String?
+  customerName  String?
+  serviceName   String?
+  completedAt   DateTime?
+  createdAt     DateTime @default(now())
+  business      Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  requests      ReviewRequest[]
+}
+
+model ReviewRequest {
+  id           String   @id @default(cuid())
+  businessId   String
+  completionId String
+  scheduledFor DateTime
+  status       String   @default("pending")
+  cancelReason String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  business     Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  completion   ServiceCompletion @relation(fields: [completionId], references: [id], onDelete: Cascade)
+  deliveries   ReviewDelivery[]
+
+  @@index([businessId, status])
+  @@index([scheduledFor, status])
+}
+
+model ReviewDelivery {
+  id            String   @id @default(cuid())
+  businessId    String
+  requestId     String
+  toEmail       String
+  status        String   @default("pending")
+  providerId    String?
+  error         String?
+  sentAt        DateTime?
+  createdAt     DateTime @default(now())
+  request       ReviewRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+}
+
+model OptOut {
+  id         String   @id @default(cuid())
+  businessId String
+  email      String
+  createdAt  DateTime @default(now())
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@unique([businessId, email])
+}
+
+model WebhookEvent {
+  id             String   @id @default(cuid())
+  businessId     String?
+  source         String
+  eventType      String
+  idempotencyKey String   @unique
+  payload        Json
+  status         String   @default("received")
+  error          String?
+  createdAt      DateTime @default(now())
+  processedAt    DateTime?
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  businessId String?
+  action     String
+  metadata   Json?
+  createdAt  DateTime @default(now())
+  business   Business? @relation(fields: [businessId], references: [id], onDelete: SetNull)
+}
